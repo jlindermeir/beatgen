@@ -41,6 +41,7 @@ def analyse_filepack(folderpath, plot = False):
     print(f"Analysing done!{' '*50}")
 
     note_msg_arr = np.array(note_msg_list)
+    
     print(f'Averagae Velocity: {np.mean(note_msg_arr[:,1])}')
     noteset = set(*sorted([note_msg_arr[:,0]]))
     notedict = {}
@@ -59,7 +60,7 @@ def analyse_filepack(folderpath, plot = False):
 
     return notedict, note_msg_arr, tracktimes
 
-def parseFile(filepath, notedict, bar_resolution, record_note_off = False):
+def parseFile(filepath, notedict, bar_resolution, record_note_off = True, record_vel = True):
     mid_file = MidiFile(filepath)
     barlength = mid_file.ticks_per_beat * 4
     velocity_cutoff = 0
@@ -78,28 +79,36 @@ def parseFile(filepath, notedict, bar_resolution, record_note_off = False):
         bar_time = 0 # time of the current bar within the track [ticks]
 
         for msg in track:
+            time += msg.time
+            bar_time += msg.time
             if 'note' in msg.type:
                 if msg.velocity < velocity_cutoff:
                     continue
-                while bar_time >= barlength:
+                while np.round(bar_time / barlength * bar_resolution) >= bar_resolution:
                     bar_list.append(bar_matrix)
                     bar_matrix = makeBarMatrix()
                     bar_time -= barlength
 
                 n_ind = notedict[msg.note]
-                t_ind = int(np.floor(bar_time / barlength * bar_resolution))
+                t_ind = int(np.round(bar_time / barlength * bar_resolution))
 
                 #val = 1 if ('on' in msg.type) else -1
                 if msg.type == 'note_on':
-                    val = 1
+                    if msg.velocity > 0:
+                        val = 1
+                    else:
+                        if record_note_off: val = -1
                 elif msg.type == 'note_off' and record_note_off:
                     val = -1
                 else: 
                     val = 0
+                
+                if record_vel:
+                    val = val * msg.velocity
+                
                 if bar_matrix[t_ind, n_ind] <= 0:
                     bar_matrix[t_ind, n_ind] = val
-            time += msg.time
-            bar_time += msg.time
+
         
         if bar_matrix.any(): bar_list.append(bar_matrix)
         midi_array = np.array(bar_list)
@@ -110,14 +119,14 @@ def parseFile(filepath, notedict, bar_resolution, record_note_off = False):
     return midi_array
 
 def parseFolder(folderpath, notedict, bar_resolution, 
-                savepath = None, name = 'MIDI dataset', record_note_off = False, generate_bar_stack = False):
+                savepath = None, name = 'MIDI dataset', generate_bar_stack = False, **kwargs):
     files = getMIDIfiles(folderpath)
 
     array_dict = {}
 
     for i,f in enumerate(files):
         print(f'{i+1}/{len(files)} files. Processing: {f}' + ' '*25, end = '\r')
-        arr = parseFile(f, notedict, bar_resolution, record_note_off = record_note_off)
+        arr = parseFile(f, notedict, bar_resolution, **kwargs)
         arrname = '_'.join(f.split('/')[1:])
         array_dict[arrname] = arr
     print('Parsing done!')
@@ -151,9 +160,8 @@ def printFile(filepath):
     
     print(f'Total runtime [ticks]: {time}, {n_msg} messages')
     
-def writeBarArray(bar_arr, filename, note_dict):
+def writeBarArray(bar_arr, filename, note_dict, write_note_off = True, write_vel = True):
     # bar_arr : shape (n_bars, bar_res, n_instr)
-    print(bar_arr.shape)
     header = [
         MetaMessage('track_name', name = 'genereated MIDI track'),
         MetaMessage('instrument_name', name='Brooklyn'),
@@ -162,12 +170,11 @@ def writeBarArray(bar_arr, filename, note_dict):
         MetaMessage('set_tempo', tempo = 588235),
         Message('control_change', channel = 9, control = 4, value = 90)
     ]
-    velocity = 63
+    avg_velocity = 100
     channel = 9
     bar_length = 480 * 4
     
     bar_resolution = bar_arr.shape[1]
-    
     chord_length = bar_length / bar_resolution
     inv_note_dict = {note_dict[pitch] : pitch for pitch in note_dict.keys()}
     
@@ -177,28 +184,27 @@ def writeBarArray(bar_arr, filename, note_dict):
     time = 0
     notes = []
     printed_notes = 0
+    velocity = avg_velocity
     
     for bar in bar_arr:
         for chord in bar:
             for i, note in enumerate(chord):
-                if note == 1:
+                if note > 0:
+                    if write_vel: velocity = int(note)
                     notes.append(Message('note_on', note = inv_note_dict[i], channel = channel, velocity = velocity, time = int(time)))
                     time = 0
                     printed_notes +=1
-                elif note == -1:
+                elif note < 0 and write_note_off:
+                    if write_vel: velocity = int(-1 * note)
                     notes.append(Message('note_off', note = inv_note_dict[i], channel = channel, velocity = velocity, time = int(time)))
                     time = 0
                     printed_notes += 1
                     pass
             time += chord_length
             
-    
     track = header + notes
-    print(printed_notes)
-    
     mid_file.tracks.append(track)
     
     if not filename.endswith('.mid'):
         filename += f'_{bar_resolution}bpb.mid'
-    
     mid_file.save(filename)
