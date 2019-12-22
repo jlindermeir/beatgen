@@ -107,10 +107,11 @@ def parseFile(filepath, notedict, bar_resolution, record_note_off = True, record
                     val = val * msg.velocity
                 
                 if bar_matrix[t_ind, n_ind] <= 0:
-                    bar_matrix[t_ind, n_ind] = val
+                    bar_matrix[t_ind, n_ind] = val / 127 # normalisation
 
         
-        if bar_matrix.any(): bar_list.append(bar_matrix)
+        #if bar_matrix.any(): bar_list.append(bar_matrix) why?
+        bar_list.append(bar_matrix)
         midi_array = np.array(bar_list)
     else:
         print(mid_file.tracks)
@@ -132,8 +133,9 @@ def parseFolder(folderpath, notedict, bar_resolution,
     print('Parsing done!')
 
     if generate_bar_stack: dataset_stacked_bars = np.concatenate(list(array_dict.values()))
-
+    
     if savepath:
+        name = f'{name}_{bar_resolution}bpb'
         print(f'Saving data  @ {savepath}', end='\r')
         np.savez(f'{savepath}/{name}_tracks', notedict = notedict, **array_dict)
         if generate_bar_stack:
@@ -190,12 +192,12 @@ def writeBarArray(bar_arr, filename, note_dict, write_note_off = True, write_vel
         for chord in bar:
             for i, note in enumerate(chord):
                 if note > 0:
-                    if write_vel: velocity = int(note)
+                    if write_vel: velocity = int(note * 127)
                     notes.append(Message('note_on', note = inv_note_dict[i], channel = channel, velocity = velocity, time = int(time)))
                     time = 0
                     printed_notes +=1
                 elif note < 0 and write_note_off:
-                    if write_vel: velocity = int(-1 * note)
+                    if write_vel: velocity = int(-1 * note * 127)
                     notes.append(Message('note_off', note = inv_note_dict[i], channel = channel, velocity = velocity, time = int(time)))
                     time = 0
                     printed_notes += 1
