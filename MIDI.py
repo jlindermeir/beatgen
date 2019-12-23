@@ -49,7 +49,7 @@ def analyse_filepack(folderpath, plot = False):
         notedict[n] = i
 
     if plot:
-        fig, axes = plt.subplots(1,3, figsize = (30,10))
+        fig, axes = plt.subplots(1,3, figsize = (15,5))
         axes[0].hist(note_msg_arr[:,0], max(note_msg_arr[:,0]))
         axes[0].set_xlabel('Pitches')
         axes[1].hist(note_msg_arr[:,1])
@@ -110,8 +110,7 @@ def parseFile(filepath, notedict, bar_resolution, record_note_off = True, record
                     bar_matrix[t_ind, n_ind] = val / 127 # normalisation
 
         
-        #if bar_matrix.any(): bar_list.append(bar_matrix) why?
-        bar_list.append(bar_matrix)
+        if bar_matrix.any(): bar_list.append(bar_matrix)
         midi_array = np.array(bar_list)
     else:
         print(mid_file.tracks)

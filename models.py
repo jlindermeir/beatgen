@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.keras.layers import Lambda, Input, Dense, Flatten, Reshape, Conv1D
+from tensorflow.keras.layers import Lambda, Input, Dense, Flatten, Reshape, Conv2D, MaxPooling2D, ThresholdedReLU
 from tensorflow.keras.models import Model
 from tensorflow.keras.losses import binary_crossentropy, mean_squared_error
 
@@ -43,8 +43,11 @@ class VAE():
 
     def make_encoder(self, bar_input):
         x = bar_input
-        x = Conv1D(128, 3, activation = 'relu') (x)
-        x = Conv1D(128, 3, activation = 'relu') (x)
+        x = Reshape((*self.input_shape, 1)) (x)
+        x = Conv2D(128, (3, 1), activation = 'relu', padding = 'same') (x)
+        x = MaxPooling2D() (x)
+        x = Conv2D(128, (3, 1), activation = 'relu', padding = 'same') (x)
+        x = MaxPooling2D() (x)
         x = Flatten(name = 'flatten')(x)
                 
         z_mean = Dense(self.latent_dim, name = 'z_mean') (x)
@@ -62,6 +65,7 @@ class VAE():
         x = Dense(128, activation = 'relu') (x)
         x = Dense(tf.math.reduce_prod(self.input_shape), activation = 'sigmoid') (x)
         x = Reshape(self.input_shape) (x)
+        #x = ThresholdedReLU(theta = .1) (x)
 
         decoder = Model(latent_input, x, name='decoder')
         if self.debug: decoder.summary()
