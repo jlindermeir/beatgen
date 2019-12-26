@@ -13,6 +13,7 @@ class VAE():
         self.latent_dim = latent_dim
         self.debug = debug
         self.weightdir = 'weights/'
+        self.callbacks = [tf.keras.callbacks.TensorBoard(log_dir='./logs')]
 
         bar_input = Input(shape = self.input_shape, name='encoder_input')
         latent_input = Input(shape = self.latent_dim, name = 'latent_input')
@@ -34,11 +35,10 @@ class VAE():
         
         vae_loss = tf.math.reduce_mean(kl_loss + recon_loss)
         self.VAE.add_loss(vae_loss)
-
+        
         self.VAE.compile(optimizer='adam')
         if self.debug:
             self.VAE.summary()
-
         if weights: self.VAE.load_weights(weights)
 
     def make_encoder(self, bar_input):
@@ -72,7 +72,7 @@ class VAE():
         return decoder
 
     def train(self, train_data, epochs, batchsize, validation_split=0.0):
-        history = self.VAE.fit(train_data, epochs=epochs, batch_size = batchsize, validation_split = validation_split)
+        history = self.VAE.fit(train_data, epochs=epochs, batch_size = batchsize, validation_split = validation_split, callbacks = self.callbacks)
         name = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
         self.VAE.save_weights(self.weightdir + name) 
         return history
