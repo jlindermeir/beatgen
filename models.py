@@ -1,7 +1,4 @@
-import numpy as np
-import tensorflow as tf
-
-from tensorflow.keras.layers import Lambda, Input, Dense, Flatten, Reshape, Conv2D, MaxPooling2D, ThresholdedReLU
+from tensorflow.keras.layers import Lambda, Input, Dense, Flatten, Reshape, Conv2D, MaxPooling2D, ThresholdedReLU, Conv2DTranspose, UpSampling2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.losses import binary_crossentropy, mean_squared_error
 
@@ -27,14 +24,14 @@ class VAE():
         
         z_mean, z_log_var, z = encoder_output
 
-        kl_loss = tf.math.reduce_sum(1 + z_log_var - tf.math.square(z_mean) - tf.math.exp(z_log_var), axis = -1)
-        kl_loss *= -.5
+        kl_loss = -.5 * tf.math.reduce_sum(1 + z_log_var - tf.math.square(z_mean) - tf.math.exp(z_log_var), axis = -1)
         
         recon_loss = mean_squared_error(tf.reshape(bar_input, [-1]), tf.reshape(vae_output, [-1]))
         recon_loss *= np.prod(self.input_shape, dtype = float)
         
-        vae_loss = tf.math.reduce_mean(kl_loss + recon_loss)
+        vae_loss = tf.math.reduce_mean(0.1 * kl_loss + recon_loss)
         self.VAE.add_loss(vae_loss)
+        self.VAE.add_metric(recon_loss, name = 'recon_loss', aggregation='mean')
         
         self.VAE.compile(optimizer='adam')
         if self.debug:
@@ -42,13 +39,14 @@ class VAE():
         if weights: self.VAE.load_weights(weights)
 
     def make_encoder(self, bar_input):
+        n_conv = 4
         x = bar_input
         x = Reshape((*self.input_shape, 1)) (x)
-        x = Conv2D(128, (3, 1), activation = 'relu', padding = 'same') (x)
-        x = MaxPooling2D() (x)
-        x = Conv2D(128, (3, 1), activation = 'relu', padding = 'same') (x)
-        x = MaxPooling2D() (x)
+        for _ in range(n_conv):
+          x = Conv2D(32, (3, 1), activation = 'relu', padding = 'valid') (x)
+          x = MaxPooling2D((2,1)) (x)
         x = Flatten(name = 'flatten')(x)
+        x = Dense(self.latent_dim * 2, activation = 'relu') (x)
                 
         z_mean = Dense(self.latent_dim, name = 'z_mean') (x)
         z_log_var = Dense(self.latent_dim, name = 'z_log_var') (x)
@@ -61,18 +59,24 @@ class VAE():
         return encoder
 
     def make_decoder(self, latent_input):
+        n_deconv = 4
         x = latent_input
-        x = Dense(128, activation = 'relu') (x)
-        x = Dense(tf.math.reduce_prod(self.input_shape), activation = 'sigmoid') (x)
+        x = Dense(self.latent_dim * 2, activation = 'relu') (x)
+        x = Dense(1408, activation = 'relu') (x)
+        x = Reshape((2, 22, 32)) (x)
+        for _ in range(n_deconv - 1):
+          x = UpSampling2D((2,1)) (x)
+          x = Conv2DTranspose(32, (3,1), activation = 'relu', padding = 'valid') (x)
+        x = UpSampling2D((2,1)) (x)
+        x = Conv2DTranspose(1, (5,1), activation = 'relu', padding = 'valid') (x)
         x = Reshape(self.input_shape) (x)
-        #x = ThresholdedReLU(theta = .1) (x)
 
         decoder = Model(latent_input, x, name='decoder')
         if self.debug: decoder.summary()
         return decoder
 
-    def train(self, train_data, epochs, batchsize, validation_split=0.0):
-        history = self.VAE.fit(train_data, epochs=epochs, batch_size = batchsize, validation_split = validation_split, callbacks = self.callbacks)
+    def train(self, train_data, epochs, batchsize, validation_split=0.0, **kwargs):
+        history = self.VAE.fit(train_data, epochs=epochs, batch_size = batchsize, validation_split = validation_split, callbacks = self.callbacks, **kwargs)
         name = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
         self.VAE.save_weights(self.weightdir + name) 
         return history
