@@ -1,4 +1,6 @@
 # models.py
+import tensorflow as tf
+import numpy as np
 
 from tensorflow.keras.layers import Lambda, Input, Dense, Flatten, Reshape, ThresholdedReLU
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, UpSampling1D
@@ -120,9 +122,9 @@ class VAE():
         #x = Dense(self.latent_dim * 2, activation = 'relu') (x)
         x = Dense(4 * 128, activation = 'relu') (x)
         x = Reshape((4, 128)) (x)
-        for _ in range(n_deconv - 1):
+        for i in range(n_deconv - 1):
           x = UpSampling1D(2) (x)
-          x = Conv1D(64 * 2 ** i, 3, activation = 'relu', padding = 'same') (x)
+          x = Conv1D(64 * 2, 3, activation = 'relu', padding = 'same') (x)
         x = UpSampling1D(2) (x)
         x = Conv1D(22, 5, activation = 'relu', padding = 'same') (x)
 
